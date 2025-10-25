@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Danh sách tài khoản</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 10px 25px rgba(0,0,0,0.08)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    img[data-fallback="true"] { background: #f1f5f9; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+  <header class="sticky top-0 z-10 bg-white/80 backdrop-blur shadow">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold tracking-tight">Danh sách tài khoản</h1>
+        <p class="text-sm text-slate-500">Nguồn: <code>data.txt</code></p>
+      </div>
+      <form id="filters" class="grid grid-cols-1 md:grid-cols-4 gap-3 w-full md:w-auto">
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Tìm theo tên</span>
+          <input id="q" type="search" placeholder="vd: Nam, Giang…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Tỉnh/Thành</span>
+          <select id="province" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Tất cả</option>
+          </select>
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Giới tính</span>
+          <select id="gender" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">Tất cả</option>
+            <option value="1">Nam</option>
+            <option value="2">Nữ</option>
+            <option value="3">Khác/Ẩn</option>
+          </select>
+        </label>
+        <div class="flex items-end gap-2">
+          <button type="button" id="clearBtn" class="w-full rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium hover:bg-slate-200">Xóa lọc</button>
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <section class="mb-4 grid grid-cols-2 md:grid-cols-4 gap-3" id="stats"></section>
+    <div id="resultInfo" class="text-sm text-slate-600 mb-4"></div>
+    <section id="grid" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></section>
+    <nav id="pagination" class="mt-6 flex flex-wrap items-center gap-2"></nav>
+  </main>
+
+  <template id="cardTpl">
+    <article class="bg-white rounded-2xl shadow-soft overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+      <div class="p-4 flex items-center gap-4">
+        <img class="h-14 w-14 rounded-full object-cover ring-1 ring-slate-200 cursor-pointer" alt="avatar" />
+        <div class="min-w-0">
+          <h3 class="font-semibold truncate"></h3>
+          <p class="text-xs text-slate-500 truncate"></p>
+          <p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p>
+        </div>
+      </div>
+      <div class="border-t border-slate-100 grid grid-cols-3 text-center">
+        <div class="p-3">
+          <p class="text-xs text-slate-500">Điểm đơn</p>
+          <p class="font-semibold" data-diemdon>-</p>
+        </div>
+        <div class="p-3">
+          <p class="text-xs text-slate-500">Điểm đôi</p>
+          <p class="font-semibold" data-diemdoi>-</p>
+        </div>
+        <div class="p-3">
+          <p class="text-xs text-slate-500">Trung bình</p>
+          <p class="font-semibold" data-avg>-</p>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <div id="imageModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+    <div class="relative">
+      <button id="closeModal" class="absolute top-2 right-2 bg-white rounded-full p-1 text-slate-800">✕</button>
+      <img id="modalImg" src="" class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg" />
+    </div>
+  </div>
+
+  <script>
+    const PAGE_SIZE = 50;
+    const state = { raw: [], filtered: [], page: 1, q: '', province: '', gender: '' };
+    const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
+
+    function normalizeUser(u) {
+      const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
+      const province = (u.TenTinhThanh && u.TenTinhThanh !== '--') ? u.TenTinhThanh : 'Không rõ';
+      const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
+      const g = u.GioiTinh ?? '';
+      const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
+      const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
+      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg };
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('data.txt', { cache: 'no-store' });
+        if (!res.ok) throw new Error('Không đọc được data.txt');
+        const text = await res.text();
+        const json = JSON.parse(text);
+        state.raw = json.map(normalizeUser);
+        initFilters();
+        applyFilters();
+      } catch (e) {
+        document.getElementById('resultInfo').textContent = 'Lỗi: ' + e.message;
+      }
+    }
+
+    function initFilters() {
+      const provinces = Array.from(new Set(state.raw.map(u => u.province))).sort((a,b)=>a.localeCompare(b,'vi'));
+      const select = document.getElementById('province');
+      provinces.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p === 'Không rõ' ? '' : p;
+        opt.textContent = p;
+        select.appendChild(opt);
+      });
+    }
+
+    function applyFilters() {
+      const q = state.q.toLowerCase();
+      const gender = state.gender;
+      const province = state.province;
+      state.filtered = state.raw.filter(u => {
+        const byName = !q || u.name.toLowerCase().includes(q);
+        const byProvince = !province || u.province === province;
+        const byGender = !gender || String(u.gender) === String(gender);
+        return byName && byProvince && byGender;
+      });
+      state.page = 1;
+      render();
+    }
+
+    function render() {
+      const total = state.filtered.length;
+      const nam = state.filtered.filter(u => Number(u.gender) === 1).length;
+      const nu = state.filtered.filter(u => Number(u.gender) === 2).length;
+      const khac = total - nam - nu;
+      document.getElementById('stats').innerHTML = `
+        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Tổng</p><p class="text-2xl font-bold">${total}</p></div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Nam</p><p class="text-2xl font-bold">${nam}</p></div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Nữ</p><p class="text-2xl font-bold">${nu}</p></div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Khác/Ẩn</p><p class="text-2xl font-bold">${khac}</p></div>
+      `;
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      const start = (state.page - 1) * PAGE_SIZE;
+      const pageItems = state.filtered.slice(start, start + PAGE_SIZE);
+      const tpl = document.getElementById('cardTpl');
+      for (const u of pageItems) {
+        const node = tpl.content.cloneNode(true);
+        const img = node.querySelector('img');
+        img.src = u.avatar;
+        img.setAttribute('data-fallback', 'true');
+        img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
+        img.addEventListener('click', () => showImage(u.avatar));
+        node.querySelector('h3').textContent = u.name;
+        node.querySelector('p.text-xs.text-slate-500').textContent = u.province;
+        node.querySelector('[data-gender-chip]').textContent = u.genderText;
+        node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
+        node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
+        node.querySelector('[data-avg]').textContent = u.avg ?? '-';
+        grid.appendChild(node);
+      }
+      const end = Math.min(start + PAGE_SIZE, state.filtered.length);
+      document.getElementById('resultInfo').textContent = total ? `Hiển thị ${start + 1}–${end} / ${total}` : 'Không có kết quả';
+      const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+      const nav = document.getElementById('pagination');
+      nav.innerHTML = '';
+      function addBtn(label, page, disabled = false, isActive = false) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = label;
+        btn.className = `px-3 py-1.5 rounded-lg border text-sm ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 hover:bg-slate-50'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+        btn.disabled = disabled;
+        btn.onclick = () => { state.page = page; render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
+        nav.appendChild(btn);
+      }
+      addBtn('«', 1, state.page === 1);
+      addBtn('‹', Math.max(1, state.page - 1), state.page === 1);
+      const windowSize = 5;
+      const startPage = Math.max(1, state.page - Math.floor(windowSize / 2));
+      const endPage = Math.min(totalPages, startPage + windowSize - 1);
+      for (let p = Math.max(1, endPage - windowSize + 1); p <= endPage; p++) addBtn(String(p), p, false, p === state.page);
+      addBtn('›', Math.min(totalPages, state.page + 1), state.page === totalPages);
+      addBtn('»', totalPages, state.page === totalPages);
+    }
+
+    function showImage(src) {
+      const modal = document.getElementById('imageModal');
+      const modalImg = document.getElementById('modalImg');
+      modalImg.src = src;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    document.getElementById('closeModal').addEventListener('click', () => {
+      const modal = document.getElementById('imageModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    });
+
+    document.getElementById('q').addEventListener('input', e => { state.q = e.target.value; applyFilters(); });
+    document.getElementById('province').addEventListener('change', e => { state.province = e.target.value; applyFilters(); });
+    document.getElementById('gender').addEventListener('change', e => { state.gender = e.target.value; applyFilters(); });
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      document.getElementById('q').value = '';
+      document.getElementById('province').value = '';
+      document.getElementById('gender').value = '';
+      state.q = ''; state.province = ''; state.gender = '';
+      applyFilters();
+    });
+
+    load();
+  </script>
+</body>
+</html>
