@@ -129,7 +129,7 @@
     function openAchModal() { const m = document.getElementById('achModal'); m.classList.remove('hidden'); m.classList.add('flex'); }
     function closeAchModal() { const m = document.getElementById('achModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
     async function fetchAchievements(userId) {
-      const url = `http://vnss.sportconnect.vn:5009/user/tournamentHistory/achievement/${userId}`;
+      const url = `https://apispc.pickletour.vn/user/tournamentHistory/achievement/${userId}`;
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
