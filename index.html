@@ -30,8 +30,8 @@
       </div>
       <form id="filters" class="grid grid-cols-1 md:grid-cols-4 gap-3 w-full md:w-auto">
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Tìm theo tên</span>
-          <input id="q" type="search" placeholder="vd: Nam, Giang…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+         <span class="text-xs font-medium text-slate-600">Tìm theo tên hoặc SĐT</span>
+<input id="q" type="search" placeholder="vd: Nam, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Tỉnh/Thành</span>
@@ -69,7 +69,12 @@
         <div class="min-w-0">
           <h3 class="font-semibold truncate"></h3>
           <p class="text-xs text-slate-500 truncate"></p>
-          <p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p>
+          <!-- THÊM MỚI: -->
+<p class="text-xs mt-0.5">
+  <a data-phone class="text-indigo-600 hover:underline break-all"></a>
+</p>
+<p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p>
+          <!-- <p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p> -->
         </div>
       </div>
       <div class="border-t border-slate-100 grid grid-cols-3 text-center">
@@ -101,20 +106,24 @@
     const state = { raw: [], filtered: [], page: 1, q: '', province: '', gender: '' };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
-    function normalizeUser(u) {
-      const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
-      const province = (u.TenTinhThanh && u.TenTinhThanh !== '--') ? u.TenTinhThanh : 'Không rõ';
-      const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
-      const g = u.GioiTinh ?? '';
-      const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
-      const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
-      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
-      return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg };
-    }
+   function normalizeUser(u) {
+  const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
+  const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
+  const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
+  const g = 3; // u.GioiTinh ?? '';
+  const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
+  const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
+  const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+
+  const phoneRaw = (u.Phone ?? '').toString().trim();
+  const phoneDigits = phoneRaw.replace(/\D/g, ''); // chỉ số
+  return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+}
+
 
     async function load() {
       try {
-        const res = await fetch('data.txt', { cache: 'no-store' });
+        const res = await fetch('newdata.txt', { cache: 'no-store' });
         if (!res.ok) throw new Error('Không đọc được data.txt');
         const text = await res.text();
         const json = JSON.parse(text);
@@ -137,19 +146,35 @@
       });
     }
 
-    function applyFilters() {
-      const q = state.q.toLowerCase();
-      const gender = state.gender;
-      const province = state.province;
-      state.filtered = state.raw.filter(u => {
-        const byName = !q || u.name.toLowerCase().includes(q);
-        const byProvince = !province || u.province === province;
-        const byGender = !gender || String(u.gender) === String(gender);
-        return byName && byProvince && byGender;
-      });
-      state.page = 1;
-      render();
-    }
+   function applyFilters() {
+  const qRaw = state.q || '';
+  const q = qRaw.toLowerCase();
+  const qDigits = q.replace(/\D/g, '');
+
+  const hasLetters = /[a-z\u00c0-\u024f\u1e00-\u1eff]/i.test(q); // gồm tiếng Việt
+  const hasDigits  = /\d/.test(q);
+
+  const gender = state.gender;
+  const province = state.province;
+
+  state.filtered = state.raw.filter(u => {
+    const nameOk  = !hasLetters || u.name.toLowerCase().includes(q);
+    const phoneOk = !hasDigits  || (u.phoneDigits && u.phoneDigits.includes(qDigits));
+
+    const queryOk =
+      (!hasLetters && !hasDigits)     // ô trống
+      || (hasLetters && nameOk)       // có chữ -> so tên
+      || (hasDigits && phoneOk);      // có số  -> so SĐT
+
+    const byProvince = !province || u.province === province;
+    const byGender   = !gender   || String(u.gender) === String(gender);
+    return queryOk && byProvince && byGender;
+  });
+
+  state.page = 1;
+  render();
+}
+
 
     function render() {
       const total = state.filtered.length;
@@ -168,20 +193,35 @@
       const pageItems = state.filtered.slice(start, start + PAGE_SIZE);
       const tpl = document.getElementById('cardTpl');
       for (const u of pageItems) {
-        const node = tpl.content.cloneNode(true);
-        const img = node.querySelector('img');
-        img.src = u.avatar;
-        img.setAttribute('data-fallback', 'true');
-        img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
-        img.addEventListener('click', () => showImage(u.avatar));
-        node.querySelector('h3').textContent = u.name;
-        node.querySelector('p.text-xs.text-slate-500').textContent = u.province;
-        node.querySelector('[data-gender-chip]').textContent = u.genderText;
-        node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
-        node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
-        node.querySelector('[data-avg]').textContent = u.avg ?? '-';
-        grid.appendChild(node);
-      }
+  const node = tpl.content.cloneNode(true);
+  const img = node.querySelector('img');
+  img.src = u.avatar;
+  img.setAttribute('data-fallback', 'true');
+  img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
+  img.addEventListener('click', () => showImage(u.avatar));
+
+  const title = node.querySelector('h3');
+  const subtitle = node.querySelector('p.text-xs.text-slate-500'); // tỉnh/thành
+
+  title.textContent = u.name;
+  subtitle.textContent = u.province;
+
+  const phoneEl = node.querySelector('[data-phone]');
+  if (u.phoneDigits) {
+    phoneEl.textContent = u.phone;
+    phoneEl.href = `tel:${u.phoneDigits}`;
+  } else {
+    phoneEl.textContent = 'Không có SĐT';
+    phoneEl.removeAttribute('href');
+    phoneEl.classList.remove('text-indigo-600','hover:underline');
+  }
+
+  node.querySelector('[data-gender-chip]').textContent = u.genderText;
+  node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
+  node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
+  node.querySelector('[data-avg]').textContent = u.avg ?? '-';
+  grid.appendChild(node);
+}
       const end = Math.min(start + PAGE_SIZE, state.filtered.length);
       document.getElementById('resultInfo').textContent = total ? `Hiển thị ${start + 1}–${end} / ${total}` : 'Không có kết quả';
       const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
