@@ -9,9 +9,7 @@
     tailwind.config = {
       theme: {
         extend: {
-          boxShadow: {
-            soft: '0 10px 25px rgba(0,0,0,0.08)'
-          }
+          boxShadow: { soft: '0 10px 25px rgba(0,0,0,0.08)' }
         }
       }
     }
@@ -26,12 +24,12 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Danh sách tài khoản</h1>
-        <p class="text-sm text-slate-500">Nguồn: <code>data.txt</code></p>
+        <p class="text-sm text-slate-500">Nguồn: <code>newdata.txt</code></p>
       </div>
       <form id="filters" class="grid grid-cols-1 md:grid-cols-4 gap-3 w-full md:w-auto">
         <label class="block">
-         <span class="text-xs font-medium text-slate-600">Tìm theo tên hoặc SĐT</span>
-<input id="q" type="search" placeholder="vd: Nam, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <span class="text-xs font-medium text-slate-600">Tìm theo tên hoặc SĐT</span>
+          <input id="q" type="search" placeholder="vd: Nam, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Tỉnh/Thành</span>
@@ -69,12 +67,12 @@
         <div class="min-w-0">
           <h3 class="font-semibold truncate"></h3>
           <p class="text-xs text-slate-500 truncate"></p>
-          <!-- THÊM MỚI: -->
-<p class="text-xs mt-0.5">
-  <a data-phone class="text-indigo-600 hover:underline break-all"></a>
-</p>
-<p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p>
-          <!-- <p class="mt-1 text-xs"><span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span></p> -->
+          <p class="text-xs mt-0.5">
+            <a data-phone class="text-indigo-600 hover:underline break-all"></a>
+          </p>
+          <p class="mt-1 text-xs">
+            <span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span>
+          </p>
         </div>
       </div>
       <div class="border-t border-slate-100 grid grid-cols-3 text-center">
@@ -91,13 +89,29 @@
           <p class="font-semibold" data-avg>-</p>
         </div>
       </div>
+      <div class="border-t border-slate-100 p-3">
+        <button type="button" data-ach-btn
+          class="w-full text-sm rounded-xl bg-indigo-600 text-white py-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          Xem thành tích
+        </button>
+      </div>
     </article>
   </template>
 
+  <!-- Modal ảnh -->
   <div id="imageModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
     <div class="relative">
       <button id="closeModal" class="absolute top-2 right-2 bg-white rounded-full p-1 text-slate-800">✕</button>
       <img id="modalImg" src="" class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-lg" />
+    </div>
+  </div>
+
+  <!-- Modal thành tích -->
+  <div id="achModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl shadow-lg max-w-2xl w-[92vw] p-4 relative">
+      <button id="closeAchModal" class="absolute top-2 right-2 bg-slate-100 rounded-full p-1">✕</button>
+      <h3 class="text-lg font-semibold mb-2">Thành tích</h3>
+      <div id="achBody" class="max-h-[70vh] overflow-auto"></div>
     </div>
   </div>
 
@@ -106,25 +120,61 @@
     const state = { raw: [], filtered: [], page: 1, q: '', province: '', gender: '' };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
-   function normalizeUser(u) {
-  const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
-  const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
-  const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
-  const g = 3; // u.GioiTinh ?? '';
-  const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
-  const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
-  const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+    const rankMap = { GiaiNhat: 'Giải Nhất 🥇', GiaiNhi: 'Giải Nhì 🥈', GiaiBa: 'Giải Ba 🥉' };
+    function fmtDateISOToVN(d) {
+      if (!d) return '';
+      const dt = new Date(d);
+      return new Intl.DateTimeFormat('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).format(dt);
+    }
+    function openAchModal() { const m = document.getElementById('achModal'); m.classList.remove('hidden'); m.classList.add('flex'); }
+    function closeAchModal() { const m = document.getElementById('achModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+    async function fetchAchievements(userId) {
+      const url = `http://vnss.sportconnect.vn:5009/user/tournamentHistory/achievement/${userId}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    }
+    function renderAchievements(payload) {
+      const box = document.getElementById('achBody');
+      if (!payload || !Array.isArray(payload.achievementHistory) || payload.achievementHistory.length === 0) {
+        box.innerHTML = `<p class="text-sm text-slate-600">Không có dữ liệu thành tích.</p>`;
+        return;
+      }
+      const items = payload.achievementHistory
+        .sort((a,b)=> new Date(b.startDate) - new Date(a.startDate))
+        .map(a => {
+          const rank = rankMap[a.HangGiai] || a.HangGiai || '';
+          const mate = a.HoVaTenDongDoi ? ` • Đồng đội: <span class="font-medium">${a.HoVaTenDongDoi}</span>` : '';
+          return `
+          <article class="border border-slate-200 rounded-xl p-3 hover:bg-slate-50">
+            <h4 class="font-semibold text-sm">${a.Name}</h4>
+            <p class="text-xs text-slate-600 mt-0.5">${a.location || ''}</p>
+            <p class="text-xs mt-1">
+              <span class="inline-block rounded-lg bg-indigo-50 text-indigo-700 px-2 py-0.5">${rank}</span>
+              • ${fmtDateISOToVN(a.startDate)}${mate}
+            </p>
+          </article>`;
+        }).join('');
+      box.innerHTML = `<div class="grid gap-2">${items}</div>`;
+    }
 
-  const phoneRaw = (u.Phone ?? '').toString().trim();
-  const phoneDigits = phoneRaw.replace(/\D/g, ''); // chỉ số
-  return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
-}
-
+    function normalizeUser(u) {
+      const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
+      const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
+      const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
+      const g = 3; // u.GioiTinh ?? '';
+      const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
+      const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
+      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      const phoneRaw = (u.Phone ?? '').toString().trim();
+      const phoneDigits = phoneRaw.replace(/\D/g, '');
+      return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+    }
 
     async function load() {
       try {
         const res = await fetch('newdata.txt', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Không đọc được data.txt');
+        if (!res.ok) throw new Error('Không đọc được newdata.txt');
         const text = await res.text();
         const json = JSON.parse(text);
         state.raw = json.map(normalizeUser);
@@ -146,35 +196,27 @@
       });
     }
 
-   function applyFilters() {
-  const qRaw = state.q || '';
-  const q = qRaw.toLowerCase();
-  const qDigits = q.replace(/\D/g, '');
+    function applyFilters() {
+      const qRaw = state.q || '';
+      const q = qRaw.toLowerCase();
+      const qDigits = q.replace(/\D/g, '');
+      const hasLetters = /[a-z\u00c0-\u024f\u1e00-\u1eff]/i.test(q);
+      const hasDigits  = /\d/.test(q);
+      const gender = state.gender;
+      const province = state.province;
 
-  const hasLetters = /[a-z\u00c0-\u024f\u1e00-\u1eff]/i.test(q); // gồm tiếng Việt
-  const hasDigits  = /\d/.test(q);
+      state.filtered = state.raw.filter(u => {
+        const nameOk  = !hasLetters || u.name.toLowerCase().includes(q);
+        const phoneOk = !hasDigits  || (u.phoneDigits && u.phoneDigits.includes(qDigits));
+        const queryOk = (!hasLetters && !hasDigits) || (hasLetters && nameOk) || (hasDigits && phoneOk);
+        const byProvince = !province || u.province === province;
+        const byGender   = !gender   || String(u.gender) === String(gender);
+        return queryOk && byProvince && byGender;
+      });
 
-  const gender = state.gender;
-  const province = state.province;
-
-  state.filtered = state.raw.filter(u => {
-    const nameOk  = !hasLetters || u.name.toLowerCase().includes(q);
-    const phoneOk = !hasDigits  || (u.phoneDigits && u.phoneDigits.includes(qDigits));
-
-    const queryOk =
-      (!hasLetters && !hasDigits)     // ô trống
-      || (hasLetters && nameOk)       // có chữ -> so tên
-      || (hasDigits && phoneOk);      // có số  -> so SĐT
-
-    const byProvince = !province || u.province === province;
-    const byGender   = !gender   || String(u.gender) === String(gender);
-    return queryOk && byProvince && byGender;
-  });
-
-  state.page = 1;
-  render();
-}
-
+      state.page = 1;
+      render();
+    }
 
     function render() {
       const total = state.filtered.length;
@@ -187,43 +229,58 @@
         <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Nữ</p><p class="text-2xl font-bold">${nu}</p></div>
         <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Khác/Ẩn</p><p class="text-2xl font-bold">${khac}</p></div>
       `;
+
       const grid = document.getElementById('grid');
       grid.innerHTML = '';
       const start = (state.page - 1) * PAGE_SIZE;
       const pageItems = state.filtered.slice(start, start + PAGE_SIZE);
       const tpl = document.getElementById('cardTpl');
+
       for (const u of pageItems) {
-  const node = tpl.content.cloneNode(true);
-  const img = node.querySelector('img');
-  img.src = u.avatar;
-  img.setAttribute('data-fallback', 'true');
-  img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
-  img.addEventListener('click', () => showImage(u.avatar));
+        const node = tpl.content.cloneNode(true);
+        const img = node.querySelector('img');
+        img.src = u.avatar;
+        img.setAttribute('data-fallback', 'true');
+        img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
+        img.addEventListener('click', () => showImage(u.avatar));
 
-  const title = node.querySelector('h3');
-  const subtitle = node.querySelector('p.text-xs.text-slate-500'); // tỉnh/thành
+        node.querySelector('h3').textContent = u.name;
+        node.querySelector('p.text-xs.text-slate-500').textContent = u.province;
 
-  title.textContent = u.name;
-  subtitle.textContent = u.province;
+        const phoneEl = node.querySelector('[data-phone]');
+        if (u.phoneDigits) {
+          phoneEl.textContent = u.phone;
+          phoneEl.href = `tel:${u.phoneDigits}`;
+        } else {
+          phoneEl.textContent = 'Không có SĐT';
+          phoneEl.removeAttribute('href');
+          phoneEl.classList.remove('text-indigo-600','hover:underline');
+        }
 
-  const phoneEl = node.querySelector('[data-phone]');
-  if (u.phoneDigits) {
-    phoneEl.textContent = u.phone;
-    phoneEl.href = `tel:${u.phoneDigits}`;
-  } else {
-    phoneEl.textContent = 'Không có SĐT';
-    phoneEl.removeAttribute('href');
-    phoneEl.classList.remove('text-indigo-600','hover:underline');
-  }
+        node.querySelector('[data-gender-chip]').textContent = u.genderText;
+        node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
+        node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
+        node.querySelector('[data-avg]').textContent = u.avg ?? '-';
 
-  node.querySelector('[data-gender-chip]').textContent = u.genderText;
-  node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
-  node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
-  node.querySelector('[data-avg]').textContent = u.avg ?? '-';
-  grid.appendChild(node);
-}
+        const btn = node.querySelector('[data-ach-btn]');
+        btn.addEventListener('click', async () => {
+          const body = document.getElementById('achBody');
+          body.innerHTML = `<div class="text-sm text-slate-600">Đang tải…</div>`;
+          openAchModal();
+          try {
+            const data = await fetchAchievements(u.id);
+            renderAchievements(data);
+          } catch (err) {
+            body.innerHTML = `<p class="text-sm text-red-600">Lỗi tải thành tích: ${err.message}</p>`;
+          }
+        });
+
+        grid.appendChild(node);
+      }
+
       const end = Math.min(start + PAGE_SIZE, state.filtered.length);
       document.getElementById('resultInfo').textContent = total ? `Hiển thị ${start + 1}–${end} / ${total}` : 'Không có kết quả';
+
       const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
       const nav = document.getElementById('pagination');
       nav.innerHTML = '';
@@ -259,6 +316,8 @@
       modal.classList.add('hidden');
       modal.classList.remove('flex');
     });
+    document.getElementById('closeAchModal').addEventListener('click', closeAchModal);
+    document.addEventListener('click', (e)=> { if (e.target.id === 'achModal') closeAchModal(); });
 
     document.getElementById('q').addEventListener('input', e => { state.q = e.target.value; applyFilters(); });
     document.getElementById('province').addEventListener('change', e => { state.province = e.target.value; applyFilters(); });
