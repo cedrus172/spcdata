@@ -24,9 +24,17 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <h1 class="text-2xl font-bold tracking-tight">Danh sách tài khoản</h1>
-        <p class="text-sm text-slate-500">Nguồn: <code>newdata.txt</code></p>
+        <p class="text-sm text-slate-500">Nguồn: <code id="sourceLabel">newdata.txt</code></p>
       </div>
-      <form id="filters" class="grid grid-cols-1 md:grid-cols-4 gap-3 w-full md:w-auto">
+      <form id="filters" class="grid grid-cols-1 md:grid-cols-5 gap-3 w-full md:w-auto">
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Nguồn dữ liệu</span>
+          <select id="source" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="new">newdata.txt</option>
+            <option value="d2">data2.txt</option>
+            <option value="both">Cả hai</option>
+          </select>
+        </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Tìm theo tên hoặc SĐT</span>
           <input id="q" type="search" placeholder="vd: Nam, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -70,8 +78,9 @@
           <p class="text-xs mt-0.5">
             <a data-phone class="text-indigo-600 hover:underline break-all"></a>
           </p>
-          <p class="mt-1 text-xs">
+          <p class="mt-1 text-xs flex items-center gap-2">
             <span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span>
+            <span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-source-chip></span>
           </p>
         </div>
       </div>
@@ -117,7 +126,7 @@
 
   <script>
     const PAGE_SIZE = 50;
-    const state = { raw: [], filtered: [], page: 1, q: '', province: '', gender: '' };
+    const state = { rawNew: [], rawD2: [], raw: [], filtered: [], page: 1, q: '', province: '', gender: '', source: 'new' };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
     const rankMap = { GiaiNhat: 'Giải Nhất 🥇', GiaiNhi: 'Giải Nhì 🥈', GiaiBa: 'Giải Ba 🥉' };
@@ -158,26 +167,65 @@
       box.innerHTML = `<div class="grid gap-2">${items}</div>`;
     }
 
-    function normalizeUser(u) {
+    // Chuẩn hóa từ newdata.txt
+    function normalizeUserNew(u) {
       const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
       const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
       const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
-      const g = 3; // u.GioiTinh ?? '';
+      const g = 3; // Không có giới tính rõ ràng trong nguồn này
       const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
       const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
       const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
       const phoneRaw = (u.Phone ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
-      return { id: u.ID, name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+      return { id: u.ID, idType: 'new', name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+    }
+
+    // Chuẩn hóa từ data2.txt
+    function normalizeUserD2(u) {
+      const name = u.nickName?.trim() || u.fullName?.trim() || 'Không tên';
+      const province = 'Không rõ';
+      const avatar = 'https://via.placeholder.com/96x96?text=%20';
+      // gender: 1 Nam, 2 Nữ, 0 hoặc null -> 3 Khác/Ẩn
+      const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender);
+      const diemDon = (typeof u.point === 'number') ? u.point : null;
+      const diemDoi = (typeof u.doublePoint === 'number') ? u.doublePoint : null;
+      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      const phoneRaw = (u.phoneNumber ?? '').toString().trim();
+      const phoneDigits = phoneRaw.replace(/\D/g, '');
+      return { id: u.id, idType: 'd2', name, province, avatar, gender: gRaw, genderText: genderMap(gRaw), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
     }
 
     async function load() {
       try {
-        const res = await fetch('newdata.txt', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Không đọc được newdata.txt');
-        const text = await res.text();
-        const json = JSON.parse(text);
-        state.raw = json.map(normalizeUser);
+        const [resNew, resD2] = await Promise.allSettled([
+          fetch('newdata.txt', { cache: 'no-store' }),
+          fetch('data2.txt', { cache: 'no-store' })
+        ]);
+
+        // newdata.txt
+        if (resNew.status === 'fulfilled' && resNew.value.ok) {
+          const text = await resNew.value.text();
+          try {
+            const json = JSON.parse(text);
+            state.rawNew = Array.isArray(json) ? json.map(normalizeUserNew) : [];
+          } catch { state.rawNew = []; }
+        } else {
+          state.rawNew = [];
+        }
+
+        // data2.txt
+        if (resD2.status === 'fulfilled' && resD2.value.ok) {
+          const text2 = await resD2.value.text();
+          try {
+            const json2 = JSON.parse(text2);
+            state.rawD2 = Array.isArray(json2) ? json2.map(normalizeUserD2) : [];
+          } catch { state.rawD2 = []; }
+        } else {
+          state.rawD2 = [];
+        }
+
+        applySource();
         initFilters();
         applyFilters();
       } catch (e) {
@@ -185,9 +233,39 @@
       }
     }
 
+    // Hợp nhất hoặc chọn nguồn
+    function applySource() {
+      const srcSel = state.source;
+      const label = document.getElementById('sourceLabel');
+      if (srcSel === 'new') { state.raw = state.rawNew.slice(); label.textContent = 'newdata.txt'; }
+      else if (srcSel === 'd2') { state.raw = state.rawD2.slice(); label.textContent = 'data2.txt'; }
+      else {
+        // Cả hai: ưu tiên loại trùng theo số điện thoại, giữ bản có đủ điểm đôi nếu xung đột
+        const map = new Map();
+        const ingest = (arr) => {
+          for (const u of arr) {
+            const key = u.phoneDigits || (u.name + '|' + u.id);
+            const existing = map.get(key);
+            if (!existing) map.set(key, u);
+            else {
+              // Chọn bản có nhiều dữ liệu điểm hơn
+              const scoreExisting = (existing.diemDon != null) + (existing.diemDoi != null);
+              const scoreNew = (u.diemDon != null) + (u.diemDoi != null);
+              if (scoreNew > scoreExisting) map.set(key, u);
+            }
+          }
+        };
+        ingest(state.rawNew);
+        ingest(state.rawD2);
+        state.raw = Array.from(map.values());
+        label.textContent = 'newdata.txt + data2.txt';
+      }
+    }
+
     function initFilters() {
       const provinces = Array.from(new Set(state.raw.map(u => u.province))).sort((a,b)=>a.localeCompare(b,'vi'));
       const select = document.getElementById('province');
+      select.innerHTML = '<option value="">Tất cả</option>';
       provinces.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p === 'Không rõ' ? '' : p;
@@ -258,22 +336,30 @@
         }
 
         node.querySelector('[data-gender-chip]').textContent = u.genderText;
+        node.querySelector('[data-source-chip]').textContent = (u.idType === 'new') ? 'newdata' : 'data2';
         node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
         node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
         node.querySelector('[data-avg]').textContent = u.avg ?? '-';
 
         const btn = node.querySelector('[data-ach-btn]');
-        btn.addEventListener('click', async () => {
-          const body = document.getElementById('achBody');
-          body.innerHTML = `<div class="text-sm text-slate-600">Đang tải…</div>`;
-          openAchModal();
-          try {
-            const data = await fetchAchievements(u.id);
-            renderAchievements(data);
-          } catch (err) {
-            body.innerHTML = `<p class="text-sm text-red-600">Lỗi tải thành tích: ${err.message}</p>`;
-          }
-        });
+        if (u.idType === 'new' && Number.isInteger(u.id)) {
+          btn.addEventListener('click', async () => {
+            const body = document.getElementById('achBody');
+            body.innerHTML = `<div class="text-sm text-slate-600">Đang tải…</div>`;
+            openAchModal();
+            try {
+              const data = await fetchAchievements(u.id);
+              renderAchievements(data);
+            } catch (err) {
+              body.innerHTML = `<p class="text-sm text-red-600">Lỗi tải thành tích: ${err.message}</p>`;
+            }
+          });
+        } else {
+          // Không có API thành tích cho data2
+          btn.disabled = true;
+          btn.classList.add('opacity-50','cursor-not-allowed');
+          btn.textContent = 'Không có dữ liệu thành tích';
+        }
 
         grid.appendChild(node);
       }
@@ -311,6 +397,7 @@
       modal.classList.add('flex');
     }
 
+    // Events
     document.getElementById('closeModal').addEventListener('click', () => {
       const modal = document.getElementById('imageModal');
       modal.classList.add('hidden');
@@ -326,8 +413,16 @@
       document.getElementById('q').value = '';
       document.getElementById('province').value = '';
       document.getElementById('gender').value = '';
+      document.getElementById('source').value = state.source;
       state.q = ''; state.province = ''; state.gender = '';
       applyFilters();
+    });
+    document.getElementById('source').addEventListener('change', e => {
+      state.source = e.target.value; applySource(); initFilters(); applyFilters();
+      const label = document.getElementById('sourceLabel');
+      if (state.source === 'new') label.textContent = 'newdata.txt';
+      else if (state.source === 'd2') label.textContent = 'data2.txt';
+      else label.textContent = 'newdata.txt + data2.txt';
     });
 
     load();
