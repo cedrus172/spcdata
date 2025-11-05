@@ -26,13 +26,15 @@
         <h1 class="text-2xl font-bold tracking-tight">Danh sách tài khoản</h1>
         <p class="text-sm text-slate-500">Nguồn: <code id="sourceLabel">newdata.txt</code></p>
       </div>
-      <form id="filters" class="grid grid-cols-1 md:grid-cols-5 gap-3 w-full md:w-auto">
+      <form id="filters" class="grid grid-cols-1 md:grid-cols-6 gap-3 w-full md:w-auto">
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Nguồn dữ liệu</span>
           <select id="source" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="new">SportConnect</option>
             <option value="d2">VNPA</option>
-            <option value="both">Cả hai</option>
+            <option value="d3">PickleVN</option>
+            <option value="both">Cả hai (SC + VNPA)</option>
+            <option value="all">Tất cả</option>
           </select>
         </label>
         <label class="block">
@@ -126,7 +128,7 @@
 
   <script>
     const PAGE_SIZE = 50;
-    const state = { rawNew: [], rawD2: [], raw: [], filtered: [], page: 1, q: '', province: '', gender: '', source: 'new' };
+    const state = { rawNew: [], rawD2: [], rawD3: [], raw: [], filtered: [], page: 1, q: '', province: '', gender: '', source: 'new' };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
     const rankMap = { GiaiNhat: 'Giải Nhất 🥇', GiaiNhi: 'Giải Nhì 🥈', GiaiBa: 'Giải Ba 🥉' };
@@ -172,7 +174,7 @@
       const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
       const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
       const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
-      const g = 3; // Không có giới tính rõ ràng trong nguồn này
+      const g = 3; // không có giới tính
       const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
       const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
       const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
@@ -186,8 +188,7 @@
       const name = u.nickName?.trim() || u.fullName?.trim() || 'Không tên';
       const province = 'Không rõ';
       const avatar = 'https://via.placeholder.com/96x96?text=%20';
-      // gender: 1 Nam, 2 Nữ, 0 hoặc null -> 3 Khác/Ẩn
-      const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender);
+      const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender); // 1 Nam, 2 Nữ, 0/null -> 3
       const diemDon = (typeof u.point === 'number') ? u.point : null;
       const diemDoi = (typeof u.doublePoint === 'number') ? u.doublePoint : null;
       const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
@@ -196,11 +197,26 @@
       return { id: u.id, idType: 'd2', name, province, avatar, gender: gRaw, genderText: genderMap(gRaw), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
     }
 
+    // Chuẩn hóa từ data3.txt (PickleVN)
+    function normalizeUserD3(u) {
+      const name = u.username?.trim() || u.name?.trim() || 'Không tên';
+      const province = 'Không rõ';
+      const avatar = u.avatar_src && u.avatar_src.trim() ? u.avatar_src.trim() : 'https://via.placeholder.com/96x96?text=%20';
+      const g = 3; // không có giới tính
+      const diemDon = null;
+      const diemDoi = (typeof u.double_point === 'number') ? u.double_point : null;
+      const avg = diemDoi ?? null;
+      const phoneRaw = (u.phone ?? '').toString().trim();
+      const phoneDigits = phoneRaw.replace(/\D/g, '');
+      return { id: u.id, idType: 'd3', name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw || '', phoneDigits };
+    }
+
     async function load() {
       try {
-        const [resNew, resD2] = await Promise.allSettled([
+        const [resNew, resD2, resD3] = await Promise.allSettled([
           fetch('newdata.txt', { cache: 'no-store' }),
-          fetch('data2.txt', { cache: 'no-store' })
+          fetch('data2.txt', { cache: 'no-store' }),
+          fetch('data3.txt', { cache: 'no-store' })
         ]);
 
         // newdata.txt
@@ -225,6 +241,17 @@
           state.rawD2 = [];
         }
 
+        // data3.txt
+        if (resD3.status === 'fulfilled' && resD3.value.ok) {
+          const text3 = await resD3.value.text();
+          try {
+            const json3 = JSON.parse(text3);
+            state.rawD3 = Array.isArray(json3) ? json3.map(normalizeUserD3) : [];
+          } catch { state.rawD3 = []; }
+        } else {
+          state.rawD3 = [];
+        }
+
         applySource();
         initFilters();
         applyFilters();
@@ -239,16 +266,15 @@
       const label = document.getElementById('sourceLabel');
       if (srcSel === 'new') { state.raw = state.rawNew.slice(); label.textContent = 'newdata.txt'; }
       else if (srcSel === 'd2') { state.raw = state.rawD2.slice(); label.textContent = 'data2.txt'; }
-      else {
-        // Cả hai: ưu tiên loại trùng theo số điện thoại, giữ bản có đủ điểm đôi nếu xung đột
+      else if (srcSel === 'd3') { state.raw = state.rawD3.slice(); label.textContent = 'data3.txt'; }
+      else if (srcSel === 'both') { // new + d2
         const map = new Map();
         const ingest = (arr) => {
           for (const u of arr) {
-            const key = u.phoneDigits || (u.name + '|' + u.id);
+            const key = u.phoneDigits || (u.name + '|' + u.id + '|' + u.idType);
             const existing = map.get(key);
             if (!existing) map.set(key, u);
             else {
-              // Chọn bản có nhiều dữ liệu điểm hơn
               const scoreExisting = (existing.diemDon != null) + (existing.diemDoi != null);
               const scoreNew = (u.diemDon != null) + (u.diemDoi != null);
               if (scoreNew > scoreExisting) map.set(key, u);
@@ -259,6 +285,25 @@
         ingest(state.rawD2);
         state.raw = Array.from(map.values());
         label.textContent = 'newdata.txt + data2.txt';
+      } else { // all: new + d2 + d3
+        const map = new Map();
+        const ingest = (arr) => {
+          for (const u of arr) {
+            const key = u.phoneDigits || (u.name + '|' + u.id + '|' + u.idType);
+            const existing = map.get(key);
+            if (!existing) map.set(key, u);
+            else {
+              const scoreExisting = (existing.diemDon != null) + (existing.diemDoi != null);
+              const scoreNew = (u.diemDon != null) + (u.diemDoi != null);
+              if (scoreNew > scoreExisting) map.set(key, u);
+            }
+          }
+        };
+        ingest(state.rawNew);
+        ingest(state.rawD2);
+        ingest(state.rawD3);
+        state.raw = Array.from(map.values());
+        label.textContent = 'newdata.txt + data2.txt + data3.txt';
       }
     }
 
@@ -336,7 +381,7 @@
         }
 
         node.querySelector('[data-gender-chip]').textContent = u.genderText;
-        node.querySelector('[data-source-chip]').textContent = (u.idType === 'new') ? 'newdata' : 'data2';
+        node.querySelector('[data-source-chip]').textContent = (u.idType === 'new') ? 'newdata' : (u.idType === 'd2' ? 'data2' : 'data3');
         node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
         node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
         node.querySelector('[data-avg]').textContent = u.avg ?? '-';
@@ -355,7 +400,6 @@
             }
           });
         } else {
-          // Không có API thành tích cho data2
           btn.disabled = true;
           btn.classList.add('opacity-50','cursor-not-allowed');
           btn.textContent = 'Không có dữ liệu thành tích';
@@ -422,7 +466,9 @@
       const label = document.getElementById('sourceLabel');
       if (state.source === 'new') label.textContent = 'newdata.txt';
       else if (state.source === 'd2') label.textContent = 'data2.txt';
-      else label.textContent = 'newdata.txt + data2.txt';
+      else if (state.source === 'd3') label.textContent = 'data3.txt';
+      else if (state.source === 'both') label.textContent = 'newdata.txt + data2.txt';
+      else label.textContent = 'newdata.txt + data2.txt + data3.txt';
     });
 
     load();
