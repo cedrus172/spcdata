@@ -26,7 +26,7 @@
         <h1 class="text-2xl font-bold tracking-tight">Danh sách tài khoản</h1>
         <p class="text-sm text-slate-500">Nguồn: <code id="sourceLabel">newdata.txt</code></p>
       </div>
-      <form id="filters" class="grid grid-cols-1 md:grid-cols-6 gap-3 w-full md:w-auto">
+      <form id="filters" class="grid grid-cols-1 md:grid-cols-7 gap-3 w-full md:w-auto">
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Nguồn dữ liệu</span>
           <select id="source" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -55,6 +55,14 @@
             <option value="2">Nữ</option>
             <option value="3">Khác/Ẩn</option>
           </select>
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Điểm từ</span>
+          <input id="scoreMin" type="number" step="0.1" placeholder="VD: 2.5" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </label>
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600">Đến</span>
+          <input id="scoreMax" type="number" step="0.1" placeholder="VD: 4.0" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </label>
         <div class="flex items-end gap-2">
           <button type="button" id="clearBtn" class="w-full rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium hover:bg-slate-200">Xóa lọc</button>
@@ -128,23 +136,51 @@
 
   <script>
     const PAGE_SIZE = 50;
-    const state = { rawNew: [], rawD2: [], rawD3: [], raw: [], filtered: [], page: 1, q: '', province: '', gender: '', source: 'new' };
+    const state = {
+      rawNew: [],
+      rawD2: [],
+      rawD3: [],
+      raw: [],
+      filtered: [],
+      page: 1,
+      q: '',
+      province: '',
+      gender: '',
+      source: 'new',
+      scoreMin: '',
+      scoreMax: ''
+    };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
     const rankMap = { GiaiNhat: 'Giải Nhất 🥇', GiaiNhi: 'Giải Nhì 🥈', GiaiBa: 'Giải Ba 🥉' };
+
     function fmtDateISOToVN(d) {
       if (!d) return '';
       const dt = new Date(d);
-      return new Intl.DateTimeFormat('vi-VN', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }).format(dt);
+      return new Intl.DateTimeFormat('vi-VN', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      }).format(dt);
     }
-    function openAchModal() { const m = document.getElementById('achModal'); m.classList.remove('hidden'); m.classList.add('flex'); }
-    function closeAchModal() { const m = document.getElementById('achModal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+    function openAchModal() {
+      const m = document.getElementById('achModal');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+    }
+
+    function closeAchModal() {
+      const m = document.getElementById('achModal');
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
     async function fetchAchievements(userId) {
       const url = `https://apispc.pickletour.vn/user/tournamentHistory/achievement/${userId}`;
       const res = await fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     }
+
     function renderAchievements(payload) {
       const box = document.getElementById('achBody');
       if (!payload || !Array.isArray(payload.achievementHistory) || payload.achievementHistory.length === 0) {
@@ -152,7 +188,7 @@
         return;
       }
       const items = payload.achievementHistory
-        .sort((a,b)=> new Date(b.startDate) - new Date(a.startDate))
+        .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
         .map(a => {
           const rank = rankMap[a.HangGiai] || a.HangGiai || '';
           const mate = a.HoVaTenDongDoi ? ` • Đồng đội: <span class="font-medium">${a.HoVaTenDongDoi}</span>` : '';
@@ -177,10 +213,17 @@
       const g = 3; // không có giới tính
       const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
       const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
-      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      const avg = (diemDon != null && diemDoi != null)
+        ? Number(((diemDon + diemDoi) / 2).toFixed(3))
+        : (diemDon ?? diemDoi ?? null);
       const phoneRaw = (u.Phone ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
-      return { id: u.ID, idType: 'new', name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+      return {
+        id: u.ID, idType: 'new', name, province, avatar,
+        gender: g, genderText: genderMap(g),
+        diemDon, diemDoi, avg,
+        phone: phoneRaw, phoneDigits
+      };
     }
 
     // Chuẩn hóa từ data2.txt
@@ -191,24 +234,38 @@
       const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender); // 1 Nam, 2 Nữ, 0/null -> 3
       const diemDon = (typeof u.point === 'number') ? u.point : null;
       const diemDoi = (typeof u.doublePoint === 'number') ? u.doublePoint : null;
-      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      const avg = (diemDon != null && diemDoi != null)
+        ? Number(((diemDon + diemDoi) / 2).toFixed(3))
+        : (diemDon ?? diemDoi ?? null);
       const phoneRaw = (u.phoneNumber ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
-      return { id: u.id, idType: 'd2', name, province, avatar, gender: gRaw, genderText: genderMap(gRaw), diemDon, diemDoi, avg, phone: phoneRaw, phoneDigits };
+      return {
+        id: u.id, idType: 'd2', name, province, avatar,
+        gender: gRaw, genderText: genderMap(gRaw),
+        diemDon, diemDoi, avg,
+        phone: phoneRaw, phoneDigits
+      };
     }
 
     // Chuẩn hóa từ data3.txt (PickleVN)
     function normalizeUserD3(u) {
       const name = u.username?.trim() || u.name?.trim() || 'Không tên';
       const province = 'Không rõ';
-      const avatar = u.avatar_src && u.avatar_src.trim() ? u.avatar_src.trim() : 'https://via.placeholder.com/96x96?text=%20';
+      const avatar = u.avatar_src && u.avatar_src.trim()
+        ? u.avatar_src.trim()
+        : 'https://via.placeholder.com/96x96?text=%20';
       const g = 3; // không có giới tính
       const diemDon = null;
       const diemDoi = (typeof u.double_point === 'number') ? u.double_point : null;
       const avg = diemDoi ?? null;
       const phoneRaw = (u.phone ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
-      return { id: u.id, idType: 'd3', name, province, avatar, gender: g, genderText: genderMap(g), diemDon, diemDoi, avg, phone: phoneRaw || '', phoneDigits };
+      return {
+        id: u.id, idType: 'd3', name, province, avatar,
+        gender: g, genderText: genderMap(g),
+        diemDon, diemDoi, avg,
+        phone: phoneRaw || '', phoneDigits
+      };
     }
 
     async function load() {
@@ -225,7 +282,9 @@
           try {
             const json = JSON.parse(text);
             state.rawNew = Array.isArray(json) ? json.map(normalizeUserNew) : [];
-          } catch { state.rawNew = []; }
+          } catch {
+            state.rawNew = [];
+          }
         } else {
           state.rawNew = [];
         }
@@ -236,7 +295,9 @@
           try {
             const json2 = JSON.parse(text2);
             state.rawD2 = Array.isArray(json2) ? json2.map(normalizeUserD2) : [];
-          } catch { state.rawD2 = []; }
+          } catch {
+            state.rawD2 = [];
+          }
         } else {
           state.rawD2 = [];
         }
@@ -247,7 +308,9 @@
           try {
             const json3 = JSON.parse(text3);
             state.rawD3 = Array.isArray(json3) ? json3.map(normalizeUserD3) : [];
-          } catch { state.rawD3 = []; }
+          } catch {
+            state.rawD3 = [];
+          }
         } else {
           state.rawD3 = [];
         }
@@ -264,10 +327,17 @@
     function applySource() {
       const srcSel = state.source;
       const label = document.getElementById('sourceLabel');
-      if (srcSel === 'new') { state.raw = state.rawNew.slice(); label.textContent = 'newdata.txt'; }
-      else if (srcSel === 'd2') { state.raw = state.rawD2.slice(); label.textContent = 'data2.txt'; }
-      else if (srcSel === 'd3') { state.raw = state.rawD3.slice(); label.textContent = 'data3.txt'; }
-      else if (srcSel === 'both') { // new + d2
+
+      if (srcSel === 'new') {
+        state.raw = state.rawNew.slice();
+        label.textContent = 'newdata.txt';
+      } else if (srcSel === 'd2') {
+        state.raw = state.rawD2.slice();
+        label.textContent = 'data2.txt';
+      } else if (srcSel === 'd3') {
+        state.raw = state.rawD3.slice();
+        label.textContent = 'data3.txt';
+      } else if (srcSel === 'both') { // new + d2
         const map = new Map();
         const ingest = (arr) => {
           for (const u of arr) {
@@ -308,7 +378,8 @@
     }
 
     function initFilters() {
-      const provinces = Array.from(new Set(state.raw.map(u => u.province))).sort((a,b)=>a.localeCompare(b,'vi'));
+      const provinces = Array.from(new Set(state.raw.map(u => u.province)))
+        .sort((a, b) => a.localeCompare(b, 'vi'));
       const select = document.getElementById('province');
       select.innerHTML = '<option value="">Tất cả</option>';
       provinces.forEach(p => {
@@ -324,17 +395,35 @@
       const q = qRaw.toLowerCase();
       const qDigits = q.replace(/\D/g, '');
       const hasLetters = /[a-z\u00c0-\u024f\u1e00-\u1eff]/i.test(q);
-      const hasDigits  = /\d/.test(q);
+      const hasDigits = /\d/.test(q);
       const gender = state.gender;
       const province = state.province;
 
+      const scoreMin = state.scoreMin;
+      const scoreMax = state.scoreMax;
+      const minVal = scoreMin !== '' ? parseFloat(scoreMin) : null;
+      const maxVal = scoreMax !== '' ? parseFloat(scoreMax) : null;
+
       state.filtered = state.raw.filter(u => {
-        const nameOk  = !hasLetters || u.name.toLowerCase().includes(q);
-        const phoneOk = !hasDigits  || (u.phoneDigits && u.phoneDigits.includes(qDigits));
-        const queryOk = (!hasLetters && !hasDigits) || (hasLetters && nameOk) || (hasDigits && phoneOk);
+        const nameOk = !hasLetters || u.name.toLowerCase().includes(q);
+        const phoneOk = !hasDigits || (u.phoneDigits && u.phoneDigits.includes(qDigits));
+        const queryOk =
+          (!hasLetters && !hasDigits) ||
+          (hasLetters && nameOk) ||
+          (hasDigits && phoneOk);
+
         const byProvince = !province || u.province === province;
-        const byGender   = !gender   || String(u.gender) === String(gender);
-        return queryOk && byProvince && byGender;
+        const byGender = !gender || String(u.gender) === String(gender);
+
+        const inScoreRange =
+          (minVal === null && maxVal === null) ||
+          (
+            u.avg != null &&
+            (minVal === null || u.avg >= minVal) &&
+            (maxVal === null || u.avg <= maxVal)
+          );
+
+        return queryOk && byProvince && byGender && inScoreRange;
       });
 
       state.page = 1;
@@ -346,15 +435,29 @@
       const nam = state.filtered.filter(u => Number(u.gender) === 1).length;
       const nu = state.filtered.filter(u => Number(u.gender) === 2).length;
       const khac = total - nam - nu;
+
       document.getElementById('stats').innerHTML = `
-        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Tổng</p><p class="text-2xl font-bold">${total}</p></div>
-        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Nam</p><p class="text-2xl font-bold">${nam}</p></div>
-        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Nữ</p><p class="text-2xl font-bold">${nu}</p></div>
-        <div class="bg-white rounded-2xl p-4 shadow-soft"><p class="text-xs text-slate-500">Khác/Ẩn</p><p class="text-2xl font-bold">${khac}</p></div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft">
+          <p class="text-xs text-slate-500">Tổng</p>
+          <p class="text-2xl font-bold">${total}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft">
+          <p class="text-xs text-slate-500">Nam</p>
+          <p class="text-2xl font-bold">${nam}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft">
+          <p class="text-xs text-slate-500">Nữ</p>
+          <p class="text-2xl font-bold">${nu}</p>
+        </div>
+        <div class="bg-white rounded-2xl p-4 shadow-soft">
+          <p class="text-xs text-slate-500">Khác/Ẩn</p>
+          <p class="text-2xl font-bold">${khac}</p>
+        </div>
       `;
 
       const grid = document.getElementById('grid');
       grid.innerHTML = '';
+
       const start = (state.page - 1) * PAGE_SIZE;
       const pageItems = state.filtered.slice(start, start + PAGE_SIZE);
       const tpl = document.getElementById('cardTpl');
@@ -377,11 +480,12 @@
         } else {
           phoneEl.textContent = 'Không có SĐT';
           phoneEl.removeAttribute('href');
-          phoneEl.classList.remove('text-indigo-600','hover:underline');
+          phoneEl.classList.remove('text-indigo-600', 'hover:underline');
         }
 
         node.querySelector('[data-gender-chip]').textContent = u.genderText;
-        node.querySelector('[data-source-chip]').textContent = (u.idType === 'new') ? 'newdata' : (u.idType === 'd2' ? 'data2' : 'data3');
+        node.querySelector('[data-source-chip]').textContent =
+          (u.idType === 'new') ? 'newdata' : (u.idType === 'd2' ? 'data2' : 'data3');
         node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
         node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
         node.querySelector('[data-avg]').textContent = u.avg ?? '-';
@@ -401,7 +505,7 @@
           });
         } else {
           btn.disabled = true;
-          btn.classList.add('opacity-50','cursor-not-allowed');
+          btn.classList.add('opacity-50', 'cursor-not-allowed');
           btn.textContent = 'Không có dữ liệu thành tích';
         }
 
@@ -409,26 +513,42 @@
       }
 
       const end = Math.min(start + PAGE_SIZE, state.filtered.length);
-      document.getElementById('resultInfo').textContent = total ? `Hiển thị ${start + 1}–${end} / ${total}` : 'Không có kết quả';
+      document.getElementById('resultInfo').textContent =
+        total ? `Hiển thị ${start + 1}–${end} / ${total}` : 'Không có kết quả';
 
       const totalPages = Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
       const nav = document.getElementById('pagination');
       nav.innerHTML = '';
+
       function addBtn(label, page, disabled = false, isActive = false) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = label;
-        btn.className = `px-3 py-1.5 rounded-lg border text-sm ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-slate-200 hover:bg-slate-50'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
+        btn.className =
+          `px-3 py-1.5 rounded-lg border text-sm ${
+            isActive
+              ? 'bg-indigo-600 text-white border-indigo-600'
+              : 'bg-white border-slate-200 hover:bg-slate-50'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`;
         btn.disabled = disabled;
-        btn.onclick = () => { state.page = page; render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
+        btn.onclick = () => {
+          state.page = page;
+          render();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
         nav.appendChild(btn);
       }
+
       addBtn('«', 1, state.page === 1);
       addBtn('‹', Math.max(1, state.page - 1), state.page === 1);
+
       const windowSize = 5;
       const startPage = Math.max(1, state.page - Math.floor(windowSize / 2));
       const endPage = Math.min(totalPages, startPage + windowSize - 1);
-      for (let p = Math.max(1, endPage - windowSize + 1); p <= endPage; p++) addBtn(String(p), p, false, p === state.page);
+      for (let p = Math.max(1, endPage - windowSize + 1); p <= endPage; p++) {
+        addBtn(String(p), p, false, p === state.page);
+      }
+
       addBtn('›', Math.min(totalPages, state.page + 1), state.page === totalPages);
       addBtn('»', totalPages, state.page === totalPages);
     }
@@ -447,22 +567,53 @@
       modal.classList.add('hidden');
       modal.classList.remove('flex');
     });
-    document.getElementById('closeAchModal').addEventListener('click', closeAchModal);
-    document.addEventListener('click', (e)=> { if (e.target.id === 'achModal') closeAchModal(); });
 
-    document.getElementById('q').addEventListener('input', e => { state.q = e.target.value; applyFilters(); });
-    document.getElementById('province').addEventListener('change', e => { state.province = e.target.value; applyFilters(); });
-    document.getElementById('gender').addEventListener('change', e => { state.gender = e.target.value; applyFilters(); });
+    document.getElementById('closeAchModal').addEventListener('click', closeAchModal);
+    document.addEventListener('click', (e) => { if (e.target.id === 'achModal') closeAchModal(); });
+
+    document.getElementById('q').addEventListener('input', e => {
+      state.q = e.target.value;
+      applyFilters();
+    });
+    document.getElementById('province').addEventListener('change', e => {
+      state.province = e.target.value;
+      applyFilters();
+    });
+    document.getElementById('gender').addEventListener('change', e => {
+      state.gender = e.target.value;
+      applyFilters();
+    });
+    document.getElementById('scoreMin').addEventListener('input', e => {
+      state.scoreMin = e.target.value;
+      applyFilters();
+    });
+    document.getElementById('scoreMax').addEventListener('input', e => {
+      state.scoreMax = e.target.value;
+      applyFilters();
+    });
+
     document.getElementById('clearBtn').addEventListener('click', () => {
       document.getElementById('q').value = '';
       document.getElementById('province').value = '';
       document.getElementById('gender').value = '';
+      document.getElementById('scoreMin').value = '';
+      document.getElementById('scoreMax').value = '';
       document.getElementById('source').value = state.source;
-      state.q = ''; state.province = ''; state.gender = '';
+
+      state.q = '';
+      state.province = '';
+      state.gender = '';
+      state.scoreMin = '';
+      state.scoreMax = '';
+
       applyFilters();
     });
+
     document.getElementById('source').addEventListener('change', e => {
-      state.source = e.target.value; applySource(); initFilters(); applyFilters();
+      state.source = e.target.value;
+      applySource();
+      initFilters();
+      applyFilters();
       const label = document.getElementById('sourceLabel');
       if (state.source === 'new') label.textContent = 'newdata.txt';
       else if (state.source === 'd2') label.textContent = 'data2.txt';
