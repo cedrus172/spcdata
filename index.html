@@ -14,11 +14,44 @@
       }
     }
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
     html { scroll-behavior: smooth; }
     img[data-fallback="true"] { background: #f1f5f9; }
   </style>
+
+  <script>
+function openProfileModal(url) {
+  const m = document.getElementById('profileModal');
+  const frame = document.getElementById('profileFrame');
+  frame.src = url;
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+}
+
+function closeProfileModal() {
+  const m = document.getElementById('profileModal');
+  const frame = document.getElementById('profileFrame');
+  frame.src = ""; // clear để tránh load lại khi ẩn
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+
+document.getElementById("closeProfileModal").addEventListener("click", closeProfileModal);
+document.addEventListener("click", (e) => {
+  if (e.target.id === "profileModal") closeProfileModal();
+});
+</script>
+
 </head>
+  <!-- Modal hồ sơ -->
+<div id="profileModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+  <div class="bg-white rounded-2xl shadow-lg max-w-4xl w-[92vw] h-[85vh] p-4 relative flex flex-col">
+    <button id="closeProfileModal" class="absolute top-2 right-2 bg-slate-100 rounded-full p-1">✕</button>
+    <h3 class="text-lg font-semibold mb-2">Hồ sơ SportConnect</h3>
+    <iframe id="profileFrame" class="w-full flex-1 rounded-xl border border-slate-200"></iframe>
+  </div>
+</div>
 <body class="bg-slate-50 text-slate-800">
   <header class="sticky top-0 z-10 bg-white/80 backdrop-blur shadow">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -522,10 +555,12 @@
           });
 
           // Nút Xem hồ sơ – SportConnect
-          profileLink.href = `https://sportconnect.vn/Account/ProfileAccount?userId=${u.id}&sportId=2`;
-          profileLink.addEventListener('click', (e) => {
-            e.stopPropagation();
-          });
+       profileLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const url = `https://sportconnect.vn/Account/ProfileAccount?userId=${u.id}&sportId=2`;
+  openProfileModal(url);
+});
         } else {
           // Không phải dữ liệu SportConnect: vô hiệu hóa nút thành tích + ẩn nút hồ sơ
           btn.disabled = true;
@@ -658,6 +693,7 @@ document.getElementById("toggleFilters").addEventListener("click", () => {
   </script>
 </body>
 </html>
+
 
 
 
