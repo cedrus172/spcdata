@@ -114,11 +114,18 @@
           <p class="font-semibold" data-avg>-</p>
         </div>
       </div>
-      <div class="border-t border-slate-100 p-3">
-        <button type="button" data-ach-btn
-          class="w-full text-sm rounded-xl bg-indigo-600 text-white py-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          Xem thành tích
-        </button>
+     <div class="border-t border-slate-100 p-3">
+        <div class="flex gap-2">
+          <button type="button" data-ach-btn
+            class="flex-1 text-sm rounded-xl bg-indigo-600 text-white py-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            Xem thành tích
+          </button>
+          <a data-profile-link
+            class="flex-1 text-center text-sm rounded-xl bg-slate-100 text-slate-800 py-2 hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            target="_blank" rel="noopener">
+            Xem hồ sơ
+          </a>
+        </div>
       </div>
     </article>
   </template>
@@ -496,9 +503,13 @@
         node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
         node.querySelector('[data-avg]').textContent = u.avg ?? '-';
 
-        const btn = node.querySelector('[data-ach-btn]');
+              const btn = node.querySelector('[data-ach-btn]');
+        const profileLink = node.querySelector('[data-profile-link]');
+
         if (u.idType === 'new' && Number.isInteger(u.id)) {
-          btn.addEventListener('click', async () => {
+          // Nút Xem thành tích
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
             const body = document.getElementById('achBody');
             body.innerHTML = `<div class="text-sm text-slate-600">Đang tải…</div>`;
             openAchModal();
@@ -509,11 +520,23 @@
               body.innerHTML = `<p class="text-sm text-red-600">Lỗi tải thành tích: ${err.message}</p>`;
             }
           });
+
+          // Nút Xem hồ sơ – SportConnect
+          profileLink.href = `https://sportconnect.vn/Account/ProfileAccount?userId=${u.id}&sportId=2`;
+          profileLink.addEventListener('click', (e) => {
+            e.stopPropagation();
+          });
         } else {
+          // Không phải dữ liệu SportConnect: vô hiệu hóa nút thành tích + ẩn nút hồ sơ
           btn.disabled = true;
           btn.classList.add('opacity-50', 'cursor-not-allowed');
           btn.textContent = 'Không có dữ liệu thành tích';
+
+          if (profileLink) {
+            profileLink.classList.add('hidden');
+          }
         }
+
 
         grid.appendChild(node);
       }
@@ -635,5 +658,6 @@ document.getElementById("toggleFilters").addEventListener("click", () => {
   </script>
 </body>
 </html>
+
 
 
