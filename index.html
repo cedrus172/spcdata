@@ -558,7 +558,7 @@ document.addEventListener("click", (e) => {
        profileLink.addEventListener('click', (e) => {
   e.preventDefault();
   e.stopPropagation();
-  const url = `https://sportconnect.vn/Account/ProfileAccount?userId=${u.id}&sportId=2`;
+  const url = `https://sportconnect.vn/Account/ViewProfile?userId=${u.id}&sportId=2`;
   openProfileModal(url);
 });
         } else {
@@ -693,7 +693,6 @@ document.getElementById("toggleFilters").addEventListener("click", () => {
   </script>
 </body>
 </html>
-
 
 
 
