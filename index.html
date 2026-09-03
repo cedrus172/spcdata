@@ -73,8 +73,8 @@ function closeProfileModal() {
           </select>
         </label>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Tìm theo tên hoặc SĐT</span>
-          <input id="q" type="search" placeholder="vd: Nam, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <span class="text-xs font-medium text-slate-600">Tìm theo họ tên, biệt danh hoặc SĐT</span>
+          <input id="q" type="search" placeholder="vd: Nguyễn Văn Nam, Nam Béo, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Tỉnh/Thành</span>
@@ -119,8 +119,9 @@ function closeProfileModal() {
       <div class="p-4 flex items-center gap-4">
         <img class="h-14 w-14 rounded-full object-cover ring-1 ring-slate-200 cursor-pointer" alt="avatar" />
         <div class="min-w-0">
-          <h3 class="font-semibold truncate"></h3>
-          <p class="text-xs text-slate-500 truncate"></p>
+          <h3 class="font-semibold truncate" data-nick></h3>
+          <p class="text-sm text-slate-700 truncate" data-fullname></p>
+          <p class="text-xs text-slate-500 truncate" data-province></p>
           <p class="text-xs mt-0.5">
             <a data-phone class="text-indigo-600 hover:underline break-all"></a>
           </p>
@@ -195,6 +196,26 @@ function closeProfileModal() {
     };
     const genderMap = (n) => ({ 1: 'Nam', 2: 'Nữ', 3: 'Khác/Ẩn' }[Number(n)] || 'Khác/Ẩn');
 
+    // Chuẩn hoá để tìm kiếm: thường hoá, bỏ dấu tiếng Việt (đ -> d), gộp khoảng trắng
+    function normText(s) {
+      return (s ?? '').toString()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+
+    // Gom biệt danh + họ tên thành các trường dùng chung cho hiển thị và tìm kiếm
+    function buildNames(nickRaw, fullRaw) {
+      const nickName = (nickRaw ?? '').toString().trim();
+      const fullName = (fullRaw ?? '').toString().trim();
+      return {
+        nickName, fullName,
+        name: nickName || fullName || 'Không tên',
+        searchNick: normText(nickName),
+        searchFull: normText(fullName)
+      };
+    }
+
     const rankMap = { GiaiNhat: 'Giải Nhất 🥇', GiaiNhi: 'Giải Nhì 🥈', GiaiBa: 'Giải Ba 🥉' };
 
     function fmtDateISOToVN(d) {
@@ -250,7 +271,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ newdata.txt
     function normalizeUserNew(u) {
-      const name = u.NickName?.trim() || u.HoVaTen?.trim() || 'Không tên';
+      const names = buildNames(u.NickName, u.HoVaTen);
       const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
       const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
       const g = 3; // không có giới tính
@@ -262,7 +283,7 @@ function closeProfileModal() {
       const phoneRaw = (u.Phone ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
       return {
-        id: u.ID, idType: 'new', name, province, avatar,
+        id: u.ID, idType: 'new', ...names, province, avatar,
         gender: g, genderText: genderMap(g),
         diemDon, diemDoi, avg,
         phone: phoneRaw, phoneDigits
@@ -271,7 +292,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ data2.txt
     function normalizeUserD2(u) {
-      const name = u.nickName?.trim() || u.fullName?.trim() || 'Không tên';
+      const names = buildNames(u.nickName, u.fullName);
       const province = 'Không rõ';
       const avatar = 'https://via.placeholder.com/96x96?text=%20';
       const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender); // 1 Nam, 2 Nữ, 0/null -> 3
@@ -283,7 +304,7 @@ function closeProfileModal() {
       const phoneRaw = (u.phoneNumber ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
       return {
-        id: u.id, idType: 'd2', name, province, avatar,
+        id: u.id, idType: 'd2', ...names, province, avatar,
         gender: gRaw, genderText: genderMap(gRaw),
         diemDon, diemDoi, avg,
         phone: phoneRaw, phoneDigits
@@ -292,7 +313,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ data3.txt (PickleVN)
     function normalizeUserD3(u) {
-      const name = u.username?.trim() || u.name?.trim() || 'Không tên';
+      const names = buildNames(u.username, u.name);
       const province = 'Không rõ';
       const avatar = u.avatar_src && u.avatar_src.trim()
         ? u.avatar_src.trim()
@@ -304,7 +325,7 @@ function closeProfileModal() {
       const phoneRaw = (u.phone ?? '').toString().trim();
       const phoneDigits = phoneRaw.replace(/\D/g, '');
       return {
-        id: u.id, idType: 'd3', name, province, avatar,
+        id: u.id, idType: 'd3', ...names, province, avatar,
         gender: g, genderText: genderMap(g),
         diemDon, diemDoi, avg,
         phone: phoneRaw || '', phoneDigits
@@ -435,10 +456,11 @@ function closeProfileModal() {
 
     function applyFilters() {
       const qRaw = state.q || '';
-      const q = qRaw.toLowerCase();
-      const qDigits = q.replace(/\D/g, '');
-      const hasLetters = /[a-z\u00c0-\u024f\u1e00-\u1eff]/i.test(q);
-      const hasDigits = /\d/.test(q);
+      const q = normText(qRaw);                 // dùng so với họ tên / biệt danh (không phân biệt dấu)
+      let qDigits = qRaw.replace(/\D/g, '');   // dùng so với SĐT
+      if (qDigits.startsWith('84') && qDigits.length > 9) qDigits = '0' + qDigits.slice(2); // +84xxx -> 0xxx
+      const hasLetters = /[a-z]/.test(q);
+      const hasDigits = qDigits.length > 0;
       const gender = state.gender;
       const province = state.province;
 
@@ -448,12 +470,11 @@ function closeProfileModal() {
       const maxVal = scoreMax !== '' ? parseFloat(scoreMax) : null;
 
       state.filtered = state.raw.filter(u => {
-        const nameOk = !hasLetters || u.name.toLowerCase().includes(q);
-        const phoneOk = !hasDigits || (u.phoneDigits && u.phoneDigits.includes(qDigits));
-        const queryOk =
-          (!hasLetters && !hasDigits) ||
-          (hasLetters && nameOk) ||
-          (hasDigits && phoneOk);
+        // Có chữ  -> khớp biệt danh HOẶC họ tên (biệt danh có thể chứa số, vd "Tuan92")
+        // Chỉ số  -> khớp số điện thoại
+        const nameOk = hasLetters && (u.searchNick.includes(q) || u.searchFull.includes(q));
+        const phoneOk = !hasLetters && hasDigits && !!u.phoneDigits && u.phoneDigits.includes(qDigits);
+        const queryOk = (!hasLetters && !hasDigits) || nameOk || phoneOk;
 
         const byProvince = !province || u.province === province;
         const byGender = !gender || String(u.gender) === String(gender);
@@ -513,8 +534,18 @@ function closeProfileModal() {
         img.onerror = () => { img.src = 'https://via.placeholder.com/96x96?text=%20'; };
         img.addEventListener('click', () => showImage(u.avatar));
 
-        node.querySelector('h3').textContent = u.name;
-        node.querySelector('p.text-xs.text-slate-500').textContent = u.province;
+        // Dòng 1: biệt danh (nếu không có thì họ tên). Dòng 2: họ tên (khi khác biệt danh)
+        const nickEl = node.querySelector('[data-nick]');
+        const fullEl = node.querySelector('[data-fullname]');
+        nickEl.textContent = u.nickName || u.fullName || 'Không tên';
+        nickEl.title = nickEl.textContent;
+        if (u.fullName && u.nickName && normText(u.fullName) !== normText(u.nickName)) {
+          fullEl.textContent = u.fullName;
+          fullEl.title = u.fullName;
+        } else {
+          fullEl.classList.add('hidden');
+        }
+        node.querySelector('[data-province]').textContent = u.province;
 
         const phoneEl = node.querySelector('[data-phone]');
         if (u.phoneDigits) {
