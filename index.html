@@ -73,8 +73,8 @@ function closeProfileModal() {
           </select>
         </label>
         <label class="block">
-          <span class="text-xs font-medium text-slate-600">Tìm theo họ tên, biệt danh hoặc SĐT</span>
-          <input id="q" type="search" placeholder="vd: Nguyễn Văn Nam, Nam Béo, 0852…" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <span class="text-xs font-medium text-slate-600">Tìm theo họ tên, biệt danh, SĐT hoặc email</span>
+          <input id="q" type="search" placeholder="vd: Nam Béo, 0852…, an@gmail.com" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
         </label>
         <label class="block">
           <span class="text-xs font-medium text-slate-600">Tỉnh/Thành</span>
@@ -125,6 +125,7 @@ function closeProfileModal() {
           <p class="text-xs mt-0.5">
             <a data-phone class="text-indigo-600 hover:underline break-all"></a>
           </p>
+          <p class="text-xs mt-0.5 text-slate-500 break-all" data-email></p>
           <p class="mt-1 text-xs flex items-center gap-2">
             <span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-gender-chip></span>
             <span class="inline-block rounded-lg bg-slate-100 px-2 py-0.5" data-source-chip></span>
@@ -205,14 +206,16 @@ function closeProfileModal() {
     }
 
     // Gom biệt danh + họ tên thành các trường dùng chung cho hiển thị và tìm kiếm
-    function buildNames(nickRaw, fullRaw) {
+    function buildNames(nickRaw, fullRaw, emailRaw) {
       const nickName = (nickRaw ?? '').toString().trim();
       const fullName = (fullRaw ?? '').toString().trim();
+      const email = (emailRaw ?? '').toString().trim();
       return {
-        nickName, fullName,
+        nickName, fullName, email,
         name: nickName || fullName || 'Không tên',
         searchNick: normText(nickName),
-        searchFull: normText(fullName)
+        searchFull: normText(fullName),
+        searchEmail: email.toLowerCase()
       };
     }
 
@@ -271,7 +274,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ newdata.txt
     function normalizeUserNew(u) {
-      const names = buildNames(u.NickName, u.HoVaTen);
+      const names = buildNames(u.NickName, u.HoVaTen, u.Email);
       const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
       const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
       const g = 3; // không có giới tính
@@ -292,7 +295,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ data2.txt
     function normalizeUserD2(u) {
-      const names = buildNames(u.nickName, u.fullName);
+      const names = buildNames(u.nickName, u.fullName, u.email);
       const province = 'Không rõ';
       const avatar = 'https://via.placeholder.com/96x96?text=%20';
       const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender); // 1 Nam, 2 Nữ, 0/null -> 3
@@ -313,7 +316,7 @@ function closeProfileModal() {
 
     // Chuẩn hóa từ data3.txt (PickleVN)
     function normalizeUserD3(u) {
-      const names = buildNames(u.username, u.name);
+      const names = buildNames(u.username, u.name, u.email);
       const province = 'Không rõ';
       const avatar = u.avatar_src && u.avatar_src.trim()
         ? u.avatar_src.trim()
@@ -470,9 +473,13 @@ function closeProfileModal() {
       const maxVal = scoreMax !== '' ? parseFloat(scoreMax) : null;
 
       state.filtered = state.raw.filter(u => {
-        // Có chữ  -> khớp biệt danh HOẶC họ tên (biệt danh có thể chứa số, vd "Tuan92")
+        // Có chữ  -> khớp biệt danh HOẶC họ tên HOẶC email (email/biệt danh có thể chứa số)
         // Chỉ số  -> khớp số điện thoại
-        const nameOk = hasLetters && (u.searchNick.includes(q) || u.searchFull.includes(q));
+        const nameOk = hasLetters && (
+          u.searchNick.includes(q) ||
+          u.searchFull.includes(q) ||
+          (u.searchEmail && u.searchEmail.includes(q))
+        );
         const phoneOk = !hasLetters && hasDigits && !!u.phoneDigits && u.phoneDigits.includes(qDigits);
         const queryOk = (!hasLetters && !hasDigits) || nameOk || phoneOk;
 
@@ -555,6 +562,18 @@ function closeProfileModal() {
           phoneEl.textContent = 'Không có SĐT';
           phoneEl.removeAttribute('href');
           phoneEl.classList.remove('text-indigo-600', 'hover:underline');
+        }
+
+        const emailEl = node.querySelector('[data-email]');
+        if (u.email) {
+          emailEl.innerHTML = '';
+          const a = document.createElement('a');
+          a.href = 'mailto:' + u.email;
+          a.textContent = u.email;
+          a.className = 'hover:underline';
+          emailEl.appendChild(a);
+        } else {
+          emailEl.classList.add('hidden');
         }
 
         node.querySelector('[data-gender-chip]').textContent = u.genderText;
