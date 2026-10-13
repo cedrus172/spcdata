@@ -277,7 +277,7 @@ function closeProfileModal() {
       const names = buildNames(u.NickName, u.HoVaTen, u.Email);
       const province = (u.TinhThanh && u.TinhThanh !== '--') ? u.TinhThanh : 'Không rõ';
       const avatar = u.HinhDaiDien && u.HinhDaiDien.trim() ? u.HinhDaiDien.trim() : 'https://via.placeholder.com/96x96?text=%20';
-      const g = 3; // không có giới tính
+      const g = (u.IDGioiTinh === 1 || u.IDGioiTinh === 2) ? u.IDGioiTinh : 3; // giới tính từ bảng xếp hạng
       const diemDon = typeof u.DiemDon === 'number' ? u.DiemDon : null;
       const diemDoi = typeof u.DiemDoi === 'number' ? u.DiemDoi : null;
       const avg = (diemDon != null && diemDoi != null)
