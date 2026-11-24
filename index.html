@@ -68,6 +68,8 @@ function closeProfileModal() {
             <option value="new">SportConnect</option>
             <option value="d2">VNPA</option>
             <option value="d3">PickleVN</option>
+            <option value="d4">Baseline</option>
+            <option value="d5">PVNA</option>
             <!-- <option value="both">Cả hai (SC + VNPA)</option> -->
             <option value="all">Tất cả</option>
           </select>
@@ -185,6 +187,8 @@ function closeProfileModal() {
       rawNew: [],
       rawD2: [],
       rawD3: [],
+      rawD4: [],
+      rawD5: [],
       raw: [],
       filtered: [],
       page: 1,
@@ -299,8 +303,8 @@ function closeProfileModal() {
       const province = 'Không rõ';
       const avatar = 'https://via.placeholder.com/96x96?text=%20';
       const gRaw = (u.gender == null || Number(u.gender) === 0) ? 3 : Number(u.gender); // 1 Nam, 2 Nữ, 0/null -> 3
-      const diemDon = (typeof u.point === 'number') ? u.point : null;
-      const diemDoi = (typeof u.doublePoint === 'number') ? u.doublePoint : null;
+      const diemDon = (typeof u.point === 'number') ? Number(u.point.toFixed(3)) : null;
+      const diemDoi = (typeof u.doublePoint === 'number') ? Number(u.doublePoint.toFixed(3)) : null;
       const avg = (diemDon != null && diemDoi != null)
         ? Number(((diemDon + diemDoi) / 2).toFixed(3))
         : (diemDon ?? diemDoi ?? null);
@@ -335,12 +339,53 @@ function closeProfileModal() {
       };
     }
 
+    // Chuẩn hóa từ data4.txt (Baseline) - không có SĐT, điểm theo nội dung
+    function normalizeUserD4(u) {
+      const names = buildNames('', u.name, '');
+      const province = (u.province && u.province.trim()) ? u.province : 'Không rõ';
+      const defaultAv = /sport\.png(\?|$)/i.test(u.avatar || '');
+      const avatar = (u.avatar && !defaultAv) ? u.avatar : 'https://via.placeholder.com/96x96?text=%20';
+      const r = u.ratings || {};
+      const cats = Object.keys(Object.assign({}, u.ratings || {}, u.ranks || {}));
+      const g = cats.some(c => c.indexOf('men-') === 0) ? 1 : (cats.some(c => c.indexOf('women-') === 0) ? 2 : 3);
+      const diemDon = (typeof r['men-singles'] === 'number') ? r['men-singles'] : (typeof r['women-singles'] === 'number' ? r['women-singles'] : null);
+      const diemDoi = (typeof r['men-doubles'] === 'number') ? r['men-doubles'] : (typeof r['women-doubles'] === 'number' ? r['women-doubles'] : null);
+      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      return {
+        id: u.slug, idType: 'd4', ...names, province, avatar,
+        gender: g, genderText: genderMap(g),
+        diemDon, diemDoi, avg,
+        phone: '', phoneDigits: '', profileUrl: u.url || ''
+      };
+    }
+
+    // Chuẩn hóa từ data5.txt (PVNA)
+    function normalizeUserD5(u) {
+      const names = buildNames(u.nickName, u.fullName, u.email);
+      const province = (u.province && u.province.trim()) ? u.province : 'Không rõ';
+      const avatar = u.avatarUrl && u.avatarUrl.trim() ? u.avatarUrl.trim() : 'https://via.placeholder.com/96x96?text=%20';
+      const g = (u.gender === 1 || u.gender === 2) ? u.gender : 3;
+      const diemDon = (typeof u.point === 'number') ? Number(u.point.toFixed(3)) : null;
+      const diemDoi = (typeof u.doublePoint === 'number') ? Number(u.doublePoint.toFixed(3)) : null;
+      const avg = (diemDon != null && diemDoi != null) ? Number(((diemDon + diemDoi) / 2).toFixed(3)) : (diemDon ?? diemDoi ?? null);
+      const phoneRaw = (u.phoneNumber ?? '').toString().trim();
+      const phoneDigits = phoneRaw.replace(/\D/g, '');
+      return {
+        id: u.id, idType: 'd5', ...names, province, avatar,
+        gender: g, genderText: genderMap(g),
+        diemDon, diemDoi, avg,
+        phone: phoneRaw, phoneDigits
+      };
+    }
+
     async function load() {
       try {
-        const [resNew, resD2, resD3] = await Promise.allSettled([
+        const [resNew, resD2, resD3, resD4, resD5] = await Promise.allSettled([
           fetch('newdata.txt', { cache: 'no-store' }),
           fetch('data2.txt', { cache: 'no-store' }),
-          fetch('data3.txt', { cache: 'no-store' })
+          fetch('data3.txt', { cache: 'no-store' }),
+          fetch('data4.txt', { cache: 'no-store' }),
+          fetch('data5.txt', { cache: 'no-store' })
         ]);
 
         // newdata.txt
@@ -382,6 +427,18 @@ function closeProfileModal() {
           state.rawD3 = [];
         }
 
+        // data4.txt (Baseline)
+        if (resD4.status === 'fulfilled' && resD4.value.ok) {
+          try { const j = JSON.parse(await resD4.value.text()); state.rawD4 = Array.isArray(j) ? j.map(normalizeUserD4) : []; }
+          catch { state.rawD4 = []; }
+        } else { state.rawD4 = []; }
+
+        // data5.txt (PVNA)
+        if (resD5.status === 'fulfilled' && resD5.value.ok) {
+          try { const j = JSON.parse(await resD5.value.text()); state.rawD5 = Array.isArray(j) ? j.map(normalizeUserD5) : []; }
+          catch { state.rawD5 = []; }
+        } else { state.rawD5 = []; }
+
         applySource();
         initFilters();
         applyFilters();
@@ -404,6 +461,12 @@ function closeProfileModal() {
       } else if (srcSel === 'd3') {
         state.raw = state.rawD3.slice();
         label.textContent = 'data3.txt';
+      } else if (srcSel === 'd4') {
+        state.raw = state.rawD4.slice();
+        label.textContent = 'data4.txt';
+      } else if (srcSel === 'd5') {
+        state.raw = state.rawD5.slice();
+        label.textContent = 'data5.txt';
       } else if (srcSel === 'both') { // new + d2
         const map = new Map();
         const ingest = (arr) => {
@@ -439,8 +502,10 @@ function closeProfileModal() {
         ingest(state.rawNew);
         ingest(state.rawD2);
         ingest(state.rawD3);
+        ingest(state.rawD4);
+        ingest(state.rawD5);
         state.raw = Array.from(map.values());
-        label.textContent = 'newdata.txt + data2.txt + data3.txt';
+        label.textContent = 'newdata.txt + data2.txt + data3.txt + data4.txt + data5.txt';
       }
     }
 
@@ -578,7 +643,7 @@ function closeProfileModal() {
 
         node.querySelector('[data-gender-chip]').textContent = u.genderText;
         node.querySelector('[data-source-chip]').textContent =
-          (u.idType === 'new') ? 'newdata' : (u.idType === 'd2' ? 'data2' : 'data3');
+          ({ new: 'SportConnect', d2: 'VNPA', d3: 'PickleVN', d4: 'Baseline', d5: 'PVNA' })[u.idType] || u.idType;
         node.querySelector('[data-diemdon]').textContent = u.diemDon ?? '-';
         node.querySelector('[data-diemdoi]').textContent = u.diemDoi ?? '-';
         node.querySelector('[data-avg]').textContent = u.avg ?? '-';
@@ -616,7 +681,14 @@ function closeProfileModal() {
           btn.textContent = 'Không có dữ liệu thành tích';
 
           if (profileLink) {
-            profileLink.classList.add('hidden');
+            if (u.profileUrl) {
+              profileLink.href = u.profileUrl;
+              profileLink.target = '_blank';
+              profileLink.rel = 'noopener';
+              profileLink.textContent = 'Xem hồ sơ';
+            } else {
+              profileLink.classList.add('hidden');
+            }
           }
         }
 
@@ -743,8 +815,10 @@ function closeProfileModal() {
       if (state.source === 'new') label.textContent = 'newdata.txt';
       else if (state.source === 'd2') label.textContent = 'data2.txt';
       else if (state.source === 'd3') label.textContent = 'data3.txt';
+      else if (state.source === 'd4') label.textContent = 'data4.txt';
+      else if (state.source === 'd5') label.textContent = 'data5.txt';
       else if (state.source === 'both') label.textContent = 'newdata.txt + data2.txt';
-      else label.textContent = 'newdata.txt + data2.txt + data3.txt';
+      else label.textContent = 'newdata.txt + data2.txt + data3.txt + data4.txt + data5.txt';
     });
 document.getElementById("toggleFilters").addEventListener("click", () => {
   const box = document.getElementById("filterWrapper");
